@@ -14,8 +14,8 @@ type UUIDMap struct {
 }
 
 type uuidMapShard struct {
-	mu    sync.RWMutex
-	items map[UUID]interface{}
+	mu     sync.RWMutex
+	values map[UUID]interface{}
 }
 
 type UUID [16]byte
@@ -34,7 +34,7 @@ func NewUUIDMap(shardCount int) *UUIDMap {
 
 	for i := range sm.shards {
 		sm.shards[i] = &uuidMapShard{
-			items: make(map[UUID]interface{}),
+			values: make(map[UUID]interface{}),
 		}
 	}
 
@@ -46,13 +46,13 @@ func (sm *UUIDMap) _getShard(key UUID) *uuidMapShard {
 }
 
 // Store ...
-func (sm *UUIDMap) Store(key UUID, item interface{}) {
+func (sm *UUIDMap) Store(key UUID, value interface{}) {
 	var (
 		shard = sm._getShard(key)
 		ok    bool
 	)
 	shard.mu.RLock()
-	if _, ok = shard.items[key]; ok {
+	if _, ok = shard.values[key]; ok {
 		shard.mu.RUnlock()
 		// Already inserted here. Since that means it already
 		// passed through this operation, no need to do the
@@ -62,24 +62,44 @@ func (sm *UUIDMap) Store(key UUID, item interface{}) {
 	shard.mu.RUnlock()
 	shard.mu.Lock()
 	defer shard.mu.Unlock()
-	if _, ok = shard.items[key]; !ok {
-		shard.items[key] = item
+	if _, ok = shard.values[key]; !ok {
+		shard.values[key] = value
 	}
+}
+
+// Load ...
+func (sm *UUIDMap) Load(key UUID) (interface{}, bool) {
+	shard := sm._getShard(key)
+	shard.mu.RLock()
+	defer shard.mu.RUnlock()
+	value, ok := shard.values[key]
+	return value, ok
+}
+
+// LoadOrStore ...
+func (sm *UUIDMap) LoadOrStore(key UUID, value interface{}) (actual interface{}, loaded bool) {
+	var (
+		shard = sm._getShard(key)
+	)
+	shard.mu.RLock()
+	if actual, loaded = shard.values[key]; loaded {
+		shard.mu.RUnlock()
+		return
+	}
+	shard.mu.RUnlock()
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
+	if actual, loaded = shard.values[key]; !loaded {
+		shard.values[key] = value
+		return value, loaded
+	}
+	return actual, loaded
 }
 
 // Delete ...
 func (sm *UUIDMap) Delete(key UUID) {
 	shard := sm._getShard(key)
 	shard.mu.Lock()
-	delete(shard.items, key)
+	delete(shard.values, key)
 	shard.mu.Unlock()
-}
-
-// Get ...
-func (sm *UUIDMap) Get(key UUID) (interface{}, bool) {
-	shard := sm._getShard(key)
-	shard.mu.RLock()
-	defer shard.mu.RUnlock()
-	item, ok := shard.items[key]
-	return item, ok
 }

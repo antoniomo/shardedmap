@@ -14,8 +14,8 @@ type StrMap struct {
 }
 
 type strMapShard struct {
-	mu    sync.RWMutex
-	items map[string]interface{}
+	mu     sync.RWMutex
+	values map[string]interface{}
 }
 
 // NewStrMap ...
@@ -32,7 +32,7 @@ func NewStrMap(shardCount int) *StrMap {
 
 	for i := range sm.shards {
 		sm.shards[i] = &strMapShard{
-			items: make(map[string]interface{}),
+			values: make(map[string]interface{}),
 		}
 	}
 
@@ -44,13 +44,13 @@ func (sm *StrMap) _getShard(key string) *strMapShard {
 }
 
 // Store ...
-func (sm *StrMap) Store(key string, item interface{}) {
+func (sm *StrMap) Store(key string, value interface{}) {
 	var (
 		shard = sm._getShard(key)
 		ok    bool
 	)
 	shard.mu.RLock()
-	if _, ok = shard.items[key]; ok {
+	if _, ok = shard.values[key]; ok {
 		shard.mu.RUnlock()
 		// Already inserted here. Since that means it already
 		// passed through this operation, no need to do the
@@ -60,24 +60,44 @@ func (sm *StrMap) Store(key string, item interface{}) {
 	shard.mu.RUnlock()
 	shard.mu.Lock()
 	defer shard.mu.Unlock()
-	if _, ok = shard.items[key]; !ok {
-		shard.items[key] = item
+	if _, ok = shard.values[key]; !ok {
+		shard.values[key] = value
 	}
+}
+
+// Load ...
+func (sm *StrMap) Load(key string) (interface{}, bool) {
+	shard := sm._getShard(key)
+	shard.mu.RLock()
+	defer shard.mu.RUnlock()
+	value, ok := shard.values[key]
+	return value, ok
+}
+
+// LoadOrStore ...
+func (sm *StrMap) LoadOrStore(key string, value interface{}) (actual interface{}, loaded bool) {
+	var (
+		shard = sm._getShard(key)
+	)
+	shard.mu.RLock()
+	if actual, loaded = shard.values[key]; loaded {
+		shard.mu.RUnlock()
+		return
+	}
+	shard.mu.RUnlock()
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
+	if actual, loaded = shard.values[key]; !loaded {
+		shard.values[key] = value
+		return value, loaded
+	}
+	return actual, loaded
 }
 
 // Delete ...
 func (sm *StrMap) Delete(key string) {
 	shard := sm._getShard(key)
 	shard.mu.Lock()
-	delete(shard.items, key)
+	delete(shard.values, key)
 	shard.mu.Unlock()
-}
-
-// Get ...
-func (sm *StrMap) Get(key string) (interface{}, bool) {
-	shard := sm._getShard(key)
-	shard.mu.RLock()
-	defer shard.mu.RUnlock()
-	item, ok := shard.items[key]
-	return item, ok
 }

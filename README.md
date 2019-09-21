@@ -49,25 +49,30 @@ func main() {
 	strmap.Store(a.ID, a)
 	strmap.Store(b.ID, b)
 
-	a2, ok := strmap.Get(a.ID)
+	a2, ok := strmap.Load(a.ID)
 	if !ok {
 		panic("ARGH!")
 	}
-	b2, ok := strmap.Get(b.ID)
+	b2, ok := strmap.Load(b.ID)
+	if !ok {
+		panic("ARGH!")
+	}
+	los, ok := strmap.LoadOrStore(a.ID, b)
 	if !ok {
 		panic("ARGH!")
 	}
 
 	fmt.Printf("%+v\n", a2)
 	fmt.Printf("%+v\n", b2)
+	fmt.Printf("%+v\n", los)
 
 	strmap.Delete(a.ID)
 	strmap.Delete(b.ID)
-	_, ok = strmap.Get(a.ID)
+	_, ok = strmap.Load(a.ID)
 	if ok {
 		panic("ARGH!")
 	}
-	_, ok = strmap.Get(b.ID)
+	_, ok = strmap.Load(b.ID)
 	if ok {
 		panic("ARGH!")
 	}
@@ -80,6 +85,7 @@ The output of that should be:
 ```
 {ID:a V:1}
 {ID:b V:2}
+{ID:a V:1}
 ```
 
 As expected.
