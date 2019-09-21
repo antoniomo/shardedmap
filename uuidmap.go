@@ -103,3 +103,24 @@ func (sm *UUIDMap) Delete(key UUID) {
 	delete(shard.values, key)
 	shard.mu.Unlock()
 }
+
+// Range is modeled after sync.Map.Range. It calls f sequentially for each key
+// and value present in each of the shards in the map. If f returns false, range
+// stops the iteration.
+//
+// No key will be visited more than once, but if any value is inserted
+// concurrently, Range may or may not visit it. Similarly, if a value is
+// modified concurrently, Range may visit the previous or newest version of said
+// value.
+func (sm *UUIDMap) Range(f func(key UUID, value interface{}) bool) {
+	for _, shard := range sm.shards {
+		shard.mu.RLock()
+		for key, value := range shard.values {
+			if !f(key, value) {
+				shard.mu.RUnlock()
+				return
+			}
+		}
+		shard.mu.RUnlock()
+	}
+}

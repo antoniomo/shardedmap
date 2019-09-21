@@ -57,14 +57,19 @@ func main() {
 	if !ok {
 		panic("ARGH!")
 	}
+
+	fmt.Println("Same with range (note the random order):")
+	strmap.Range(func(key string, value interface{}) bool {
+		fmt.Printf("Key: %s, Value: %+v\n", key, value)
+		return true
+	})
+
+	fmt.Println("LoadOrStore over a.ID")
 	los, ok := strmap.LoadOrStore(a.ID, b)
 	if !ok {
 		panic("ARGH!")
 	}
-
-	fmt.Printf("%+v\n", a2)
-	fmt.Printf("%+v\n", b2)
-	fmt.Printf("%+v\n", los)
+	fmt.Printf("Key: %s, Value: %+v\n", a.ID, los)
 
 	strmap.Delete(a.ID)
 	strmap.Delete(b.ID)
@@ -83,9 +88,13 @@ func main() {
 The output of that should be:
 
 ```
-{ID:a V:1}
-{ID:b V:2}
-{ID:a V:1}
+Key: a, Value: {ID:a V:1}
+Key: b, Value: {ID:b V:2}
+Same with range (note the random order):
+Key: b, Value: {ID:b V:2}
+Key: a, Value: {ID:a V:1}
+LoadOrStore over a.ID
+Key: a, Value: {ID:a V:1}
 ```
 
 As expected.
