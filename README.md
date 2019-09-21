@@ -46,8 +46,8 @@ func main() {
 	a := Data{ID: "a", V: 1}
 	b := Data{ID: "b", V: 2}
 
-	strmap.Insert(a.ID, a)
-	strmap.Insert(b.ID, b)
+	strmap.Store(a.ID, a)
+	strmap.Store(b.ID, b)
 
 	a2, ok := strmap.Get(a.ID)
 	if !ok {

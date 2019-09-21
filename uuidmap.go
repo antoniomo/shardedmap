@@ -45,8 +45,8 @@ func (sm *UUIDMap) _getShard(key UUID) *uuidMapShard {
 	return sm.shards[memHash(key[:])%sm.shardCount]
 }
 
-// Insert ...
-func (sm *UUIDMap) Insert(key UUID, item interface{}) {
+// Store ...
+func (sm *UUIDMap) Store(key UUID, item interface{}) {
 	var (
 		shard = sm._getShard(key)
 		ok    bool

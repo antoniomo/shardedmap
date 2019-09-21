@@ -43,8 +43,8 @@ func (sm *Uint64Map) _getShard(key uint64) *uint64MapShard {
 	return sm.shards[key%sm.shardCount]
 }
 
-// Insert ...
-func (sm *Uint64Map) Insert(key uint64, item interface{}) {
+// Store ...
+func (sm *Uint64Map) Store(key uint64, item interface{}) {
 	var (
 		shard = sm._getShard(key)
 		ok    bool

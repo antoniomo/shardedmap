@@ -43,8 +43,8 @@ func (sm *StrMap) _getShard(key string) *strMapShard {
 	return sm.shards[memHashString(key)%sm.shardCount]
 }
 
-// Insert ...
-func (sm *StrMap) Insert(key string, item interface{}) {
+// Store ...
+func (sm *StrMap) Store(key string, item interface{}) {
 	var (
 		shard = sm._getShard(key)
 		ok    bool
