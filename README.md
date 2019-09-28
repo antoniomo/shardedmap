@@ -102,4 +102,5 @@ As expected.
 ## Inspiration
 
 - https://github.com/orcaman/concurrent-map
+- https://github.com/tidwall/shardmap
 - https://github.com/dgraph-io/ristretto

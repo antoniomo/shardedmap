@@ -20,7 +20,6 @@ type strMapShard struct {
 
 // NewStrMap ...
 func NewStrMap(shardCount int) *StrMap {
-
 	if shardCount <= 0 {
 		shardCount = defaultShards
 	}
@@ -40,58 +39,46 @@ func NewStrMap(shardCount int) *StrMap {
 }
 
 func (sm *StrMap) _getShard(key string) *strMapShard {
-	return sm.shards[memHashString(key)%sm.shardCount]
+	return sm.shards[memHashString(key)&(sm.shardCount-1)]
 }
 
 // Store ...
 func (sm *StrMap) Store(key string, value interface{}) {
-	var (
-		shard = sm._getShard(key)
-		ok    bool
-	)
-	shard.mu.RLock()
-	if _, ok = shard.values[key]; ok {
-		shard.mu.RUnlock()
-		// Already inserted here. Since that means it already
-		// passed through this operation, no need to do the
-		// extra book keeping, and we can return right now
-		return
-	}
-	shard.mu.RUnlock()
+	shard := sm._getShard(key)
 	shard.mu.Lock()
-	defer shard.mu.Unlock()
-	if _, ok = shard.values[key]; !ok {
-		shard.values[key] = value
-	}
+	shard.values[key] = value
+	shard.mu.Unlock()
 }
 
 // Load ...
 func (sm *StrMap) Load(key string) (interface{}, bool) {
 	shard := sm._getShard(key)
 	shard.mu.RLock()
-	defer shard.mu.RUnlock()
 	value, ok := shard.values[key]
+	shard.mu.RUnlock()
 	return value, ok
 }
 
 // LoadOrStore ...
 func (sm *StrMap) LoadOrStore(key string, value interface{}) (actual interface{}, loaded bool) {
-	var (
-		shard = sm._getShard(key)
-	)
+	shard := sm._getShard(key)
 	shard.mu.RLock()
+	// Fast path assuming value has a somewhat high chance of already being
+	// there.
 	if actual, loaded = shard.values[key]; loaded {
 		shard.mu.RUnlock()
 		return
 	}
 	shard.mu.RUnlock()
+	// Gotta check again, unfortunately
 	shard.mu.Lock()
-	defer shard.mu.Unlock()
-	if actual, loaded = shard.values[key]; !loaded {
-		shard.values[key] = value
-		return value, loaded
+	if actual, loaded = shard.values[key]; loaded {
+		shard.mu.Unlock()
+		return
 	}
-	return actual, loaded
+	shard.values[key] = value
+	shard.mu.Unlock()
+	return value, loaded
 }
 
 // Delete ...
@@ -109,7 +96,7 @@ func (sm *StrMap) Delete(key string) {
 // No key will be visited more than once, but if any value is inserted
 // concurrently, Range may or may not visit it. Similarly, if a value is
 // modified concurrently, Range may visit the previous or newest version of said
-// value.
+// value. Notice that this is RLocking, don't modify values directly here.
 func (sm *StrMap) Range(f func(key string, value interface{}) bool) {
 	for _, shard := range sm.shards {
 		shard.mu.RLock()
