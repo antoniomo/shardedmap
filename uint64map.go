@@ -34,6 +34,9 @@ func NewUint64Map(shardCount int) *Uint64Map {
 }
 
 func (sm *Uint64Map) pickShard(key uint64) uint64 {
+	// Assumes keys are well distributed. In the (rare?) case that they are
+	// evenly separated, this could lead to a "hot" shard. In that case a
+	// hashed picker would be better (TODO as an option)
 	return key % sm.shardCount
 }
 
