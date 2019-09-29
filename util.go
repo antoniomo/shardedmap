@@ -5,6 +5,7 @@ import (
 	"unsafe"
 )
 
+//nolint:gochecknoglobals
 var defaultShards = runtime.NumCPU() * 16 // github.com/tidwall/shardmap recommendation
 
 // Adapted from https://github.com/dgraph-io/ristretto/blob/master/z/rtutil.go
