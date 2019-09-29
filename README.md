@@ -21,7 +21,8 @@ encoding/decoding, and with much less memory pressure.
 
 Code generation for the exact value type has been considered, but for simplicity
 (or just lazyness) I'm not doing that at the moment. If you need to squeeze that
-extra performance, copy-paste and adapt the code to your usage.
+extra performance, copy-paste and adapt the code to your usage. Also PRs and
+motivational issues are welcome!
 
 ## Which concurrent map to use
 
@@ -32,12 +33,12 @@ requirements, but a few rules of thumb that might or might not help:
 - Many cores and goroutines:
   - Tons of reads, not many writes: `sync.Map` is appropriate.
   - Mixed reads and writes, go for a sharded map implementation. At the moment
-    [1](https://github.com/orcaman/concurrent-map) is a veteran library, well
-    tested. [2](https://github.com/tidwall/shardmap) is a newcomer but looks
-    very good. This library is inspired on both. It should be a bit more
-    performant than [1](https://github.com/orcaman/concurrent-map), while using
-    standard Go maps and slightly less dependencies than
-    [2](https://github.com/tidwall/shardmap). Also, this library has native
+    [\[1\]](https://github.com/orcaman/concurrent-map) is a veteran library,
+    well tested. [\[2\]](https://github.com/tidwall/shardmap) is a newcomer but
+    looks very good. This library is inspired on both. It should be a bit more
+    performant than [\[1\]](https://github.com/orcaman/concurrent-map), while
+    using standard Go maps and slightly less dependencies than
+    [\[2\]](https://github.com/tidwall/shardmap). Also, this library has native
     support for `uint64` and `UUID` keys if you want that. However due to my
     lazyness and because I just use this for personal projects, this lib is not
     so well tested. Caveat Emptor (and PRs are welcome, or file an issue to
@@ -47,8 +48,8 @@ requirements, but a few rules of thumb that might or might not help:
   invariants there.
 - Mixed value types, TTL, queries... You don't want a map, you want either a
   cache or an in-memory database, depending on your exact requirements. Check
-  for example [3](https://github.com/dgraph-io/ristretto) and
-  [4](https://github.com/dgraph-io/badger).
+  for example [\[3\]](https://github.com/dgraph-io/ristretto) and
+  [\[4\]](https://github.com/dgraph-io/badger).
 
 ## Installation
 
@@ -130,7 +131,7 @@ As expected.
 
 ## References
 
-- [1] https://github.com/orcaman/concurrent-map
-- [2] https://github.com/tidwall/shardmap
-- [3] https://github.com/dgraph-io/ristretto
-- [4] https://github.com/dgraph-io/badger
+- [\[1\]](https://github.com/orcaman/concurrent-map) https://github.com/orcaman/concurrent-map
+- [\[2\]](https://github.com/tidwall/shardmap) https://github.com/tidwall/shardmap
+- [\[3\]](https://github.com/dgraph-io/ristretto) https://github.com/dgraph-io/ristretto
+- [\[4\]](https://github.com/dgraph-io/badger) https://github.com/dgraph-io/badger
