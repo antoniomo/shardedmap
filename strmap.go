@@ -134,9 +134,9 @@ func (sm *StrMap) ConcRange(f func(key string, value interface{}) bool) {
 }
 
 // AsyncRange is exactly like ConcRange, but doesn't wait until all shards are
-// done. Since each shard is locked with an RWLock, it might be safe to use, but
-// concurrent reads elsewhere might get the pre-range values, so don't use this
-// one unless you don't care about that.
+// done. This is usually ok, although calls that appear to happen "sequentially"
+// on the same goroutine might get the before or after AsyncRange values, which
+// might be surprising behaviour. When that's not desirable, use ConcRange.
 func (sm *StrMap) AsyncRange(f func(key string, value interface{}) bool) {
 	for shard := range sm.mutexes {
 		go func(shard int) {
