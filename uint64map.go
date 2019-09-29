@@ -10,12 +10,8 @@ import (
 // cores but we provide a general default.
 type Uint64Map struct {
 	shardCount uint64 // Don't alter after creation, no mutex here
-	shards     []*uint64MapShard
-}
-
-type uint64MapShard struct {
-	mu     sync.RWMutex
-	values map[uint64]interface{}
+	mutexes    []sync.RWMutex
+	maps       []map[uint64]interface{}
 }
 
 // NewUint64Map ...
@@ -26,67 +22,66 @@ func NewUint64Map(shardCount int) *Uint64Map {
 
 	sm := &Uint64Map{
 		shardCount: uint64(shardCount),
-		shards:     make([]*uint64MapShard, shardCount),
+		mutexes:    make([]sync.RWMutex, shardCount),
+		maps:       make([]map[uint64]interface{}, shardCount),
 	}
 
-	for i := range sm.shards {
-		sm.shards[i] = &uint64MapShard{
-			values: make(map[uint64]interface{}),
-		}
+	for i := range sm.maps {
+		sm.maps[i] = make(map[uint64]interface{})
 	}
 
 	return sm
 }
 
-func (sm *Uint64Map) _getShard(key uint64) *uint64MapShard {
-	return sm.shards[key%sm.shardCount]
+func (sm *Uint64Map) pickShard(key uint64) uint64 {
+	return key % sm.shardCount
 }
 
 // Store ...
 func (sm *Uint64Map) Store(key uint64, value interface{}) {
-	shard := sm._getShard(key)
-	shard.mu.Lock()
-	shard.values[key] = value
-	shard.mu.Unlock()
+	shard := sm.pickShard(key)
+	sm.mutexes[shard].Lock()
+	sm.maps[shard][key] = value
+	sm.mutexes[shard].Unlock()
 }
 
 // Load ...
 func (sm *Uint64Map) Load(key uint64) (interface{}, bool) {
-	shard := sm._getShard(key)
-	shard.mu.RLock()
-	value, ok := shard.values[key]
-	shard.mu.RUnlock()
+	shard := sm.pickShard(key)
+	sm.mutexes[shard].RLock()
+	value, ok := sm.maps[shard][key]
+	sm.mutexes[shard].RUnlock()
 	return value, ok
 }
 
 // LoadOrStore ...
 func (sm *Uint64Map) LoadOrStore(key uint64, value interface{}) (actual interface{}, loaded bool) {
-	shard := sm._getShard(key)
-	shard.mu.RLock()
+	shard := sm.pickShard(key)
+	sm.mutexes[shard].RLock()
 	// Fast path assuming value has a somewhat high chance of already being
 	// there.
-	if actual, loaded = shard.values[key]; loaded {
-		shard.mu.RUnlock()
+	if actual, loaded = sm.maps[shard][key]; loaded {
+		sm.mutexes[shard].RUnlock()
 		return
 	}
-	shard.mu.RUnlock()
-	shard.mu.Lock()
+	sm.mutexes[shard].RUnlock()
 	// Gotta check again, unfortunately
-	if actual, loaded = shard.values[key]; loaded {
-		shard.mu.Unlock()
+	sm.mutexes[shard].Lock()
+	if actual, loaded = sm.maps[shard][key]; loaded {
+		sm.mutexes[shard].Unlock()
 		return
 	}
-	shard.values[key] = value
-	shard.mu.Unlock()
+	sm.maps[shard][key] = value
+	sm.mutexes[shard].Unlock()
 	return value, loaded
 }
 
 // Delete ...
 func (sm *Uint64Map) Delete(key uint64) {
-	shard := sm._getShard(key)
-	shard.mu.Lock()
-	delete(shard.values, key)
-	shard.mu.Unlock()
+	shard := sm.pickShard(key)
+	sm.mutexes[shard].Lock()
+	delete(sm.maps[shard], key)
+	sm.mutexes[shard].Unlock()
 }
 
 // Range is modeled after sync.Map.Range. It calls f sequentially for each key
@@ -96,16 +91,63 @@ func (sm *Uint64Map) Delete(key uint64) {
 // No key will be visited more than once, but if any value is inserted
 // concurrently, Range may or may not visit it. Similarly, if a value is
 // modified concurrently, Range may visit the previous or newest version of said
-// value. Notice that this is RLocking, don't modify values directly here.
+// value.
 func (sm *Uint64Map) Range(f func(key uint64, value interface{}) bool) {
-	for _, shard := range sm.shards {
-		shard.mu.RLock()
-		for key, value := range shard.values {
+	for shard := range sm.mutexes {
+		sm.mutexes[shard].RLock()
+		for key, value := range sm.maps[shard] {
 			if !f(key, value) {
-				shard.mu.RUnlock()
+				sm.mutexes[shard].RUnlock()
 				return
 			}
 		}
-		shard.mu.RUnlock()
+		sm.mutexes[shard].RUnlock()
+	}
+}
+
+// ConcRange ranges concurrently over all the shards, calling f sequentially
+// over each shard's key and value. If f returns false, range stops the
+// iteration on that shard (but the other shards continue until completion).
+//
+// No key will be visited more than once, but if any value is inserted
+// concurrently, Range may or may not visit it. Similarly, if a value is
+// modified concurrently, Range may visit the previous or newest version of said
+// value.
+func (sm *Uint64Map) ConcRange(f func(key uint64, value interface{}) bool) {
+	var wg sync.WaitGroup
+	wg.Add(int(sm.shardCount))
+	for shard := range sm.mutexes {
+		go func(shard int) {
+			sm.mutexes[shard].RLock()
+			for key, value := range sm.maps[shard] {
+				if !f(key, value) {
+					sm.mutexes[shard].RUnlock()
+					wg.Done()
+					return
+				}
+			}
+			sm.mutexes[shard].RUnlock()
+			wg.Done()
+		}(shard)
+	}
+	wg.Wait()
+}
+
+// AsyncRange is exactly like ConcRange, but doesn't wait until all shards are
+// done. Since each shard is locked with an RWLock, it might be safe to use, but
+// concurrent reads elsewhere might get the pre-range values, so don't use this
+// one unless you don't care about that.
+func (sm *Uint64Map) AsyncRange(f func(key uint64, value interface{}) bool) {
+	for shard := range sm.mutexes {
+		go func(shard int) {
+			sm.mutexes[shard].RLock()
+			for key, value := range sm.maps[shard] {
+				if !f(key, value) {
+					sm.mutexes[shard].RUnlock()
+					return
+				}
+			}
+			sm.mutexes[shard].RUnlock()
+		}(shard)
 	}
 }
